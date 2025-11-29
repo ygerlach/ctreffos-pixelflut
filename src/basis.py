@@ -51,7 +51,6 @@ def get_size():
         s.sendall(message.encode())
     except Exception as e:
         raise_exception(e, message, raise_except)
-    #Länge vom String + Leerzeichen + RGB-Hexcode)
     response = b""
     while b"\n" not in (response):
         response += s.recv(1)
