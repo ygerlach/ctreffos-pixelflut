@@ -44,6 +44,18 @@ def get_hex_color(x: int, y: int, raise_except: bool = False) -> str:
         response += s.recv(expected_message_length)
     return response.decode().split()[3]
 
+def get_size():
+    """get the canvas size"""
+    message = f'SIZE\r\n'
+    try:
+        s.sendall(message.encode())
+    except Exception as e:
+        raise_exception(e, message, raise_except)
+    response = b""
+    while b"\n" not in (response):
+        response += s.recv(1)
+    return [int(f) for f in response.decode().split()[1:]]
+
 def get_color(x: int, y: int, raise_except: bool = False) -> tuple[int, int, int]:
     """gets a pixels rgb color as RGB decimal numbers"""
     response = get_hex_color(x, y, raise_except)
