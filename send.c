@@ -33,6 +33,31 @@ const char* server_ip = "151.219.13.203";
 uint16_t server_port = 1234;
 const char* image = "ctreffos-logo-square-whitetext_small.png";
 
+int sendData(int fd, char* buffer, int bufferSize) {
+    do {
+        ssize_t wc = write(s, buffer, bufferSize);
+        if(wc == bufferSize) {
+            return 0;
+        }
+
+        if(errno == EAGAIN || errno == EWOULDBLOCK) {
+            usleep(1);
+        }
+
+        if(errno != EAGAIN && errno != EWOULDBLOCK  && errno != 0) {
+            printf("error writing: %i\n", errno);
+            return 1;
+        }
+
+        if(wc > 0) {
+            bufferSize -= wc;
+            buffer += wc;
+        }
+    }
+    while(bufferSize > 0);
+    return 0;
+}
+
 int main() {
     s = socket(AF_INET, SOCK_STREAM, 0);
     struct sockaddr_in serv;
@@ -61,7 +86,13 @@ int main() {
 
     while(1) {
         char colorBuf[12];
-        int colorLen = snprintf(colorBuf, sizeof(colorBuf), " %02x%02x%02x\r\n", cr, cg, cb);
+        int colorLen = snprintf(colorBuf, sizeof(colorBuf), " %02x%02x%02x\n", cr, cg, cb);
+
+        char offsetBuf[32];
+        int offsetLen = snprintf(offsetBuf, sizeof(offsetBuf), "OFFSET %i %i\n", posx, posy);
+        if(sendData(s, offsetBuf, offsetLen)) {
+            return 1;
+        }
 
         for(int y = 0; y < imgH; ++y) {
             char* line = data + y * size_of_line;
@@ -69,31 +100,10 @@ int main() {
             for(int x = 0; x < imgW; ++x) {
                 char* pxl = line + x * size_of_pixel;
                 if(pxl[n-1] != 0) {
-                    int length = snprintf(buffer+3, sizeof(buffer)-3, "%d %d%s", x+posx, y+posy, colorBuf);
-
-                    const char* buffCopy = buffer;
-                    int lengthCopy = length+3;
-                    do {
-                        ssize_t wc = write(s, buffCopy, lengthCopy);
-                        if(wc == lengthCopy) {
-                            break;
-                        }
-
-                        if(errno == EAGAIN || errno == EWOULDBLOCK) {
-                            usleep(1);
-                        }
-
-                        if(errno != EAGAIN && errno != EWOULDBLOCK  && errno != 0) {
-                            printf("error writing: %i\n", errno);
-                            return 1;
-                        }
-
-                        if(wc > 0) {
-                            lengthCopy -= wc;
-                            buffCopy += wc;
-                        }
+                    int length = snprintf(buffer+3, sizeof(buffer)-3, "%d %d%s", x, y, colorBuf);
+                    if(sendData(s, buffer, length+3)) {
+                        return 1;
                     }
-                    while(lengthCopy > 0);
                 }
             }
         }
