@@ -7,7 +7,6 @@
 #include "errno.h"
 #include <fcntl.h>
 
-#define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
 
 int speed = 3;
@@ -29,8 +28,10 @@ int w = 1920;
 int h = 1080;
 
 int s = -1;
-const char* server_ip = "151.219.13.203";
-uint16_t server_port = 1234;
+const char* server_ip = "151.219.62.20";
+//const char* server_ip = "151.219.13.247";
+
+uint16_t server_port = 1337;
 const char* image = "ctreffos-logo-square-whitetext_small.png";
 
 int sendData(int fd, char* buffer, int bufferSize) {
