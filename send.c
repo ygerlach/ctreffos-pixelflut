@@ -9,6 +9,8 @@
 
 #include "stb/stb_image.h"
 
+#define BINPROT 1
+
 int speed = 3;
 int vx = 1;
 int vy = 1;
@@ -59,6 +61,17 @@ int sendData(int fd, char* buffer, int bufferSize) {
     return 0;
 }
 
+#ifdef BINPROT
+struct BinCommand {
+    char prefix[2];
+    int16_t x;
+    int16_t y;
+    int8_t r;
+    int8_t g;
+    int8_t b;
+};
+#endif
+
 int main() {
     s = socket(AF_INET, SOCK_STREAM, 0);
     struct sockaddr_in serv;
@@ -81,11 +94,26 @@ int main() {
     int size_of_pixel = 2;
     int size_of_line = size_of_pixel * imgW;
 
+
+#ifdef BINPROT
+    struct BinCommand cmd;
+    cmd.prefix[0] = 'P';
+    cmd.prefix[1] = 'B';
+#else
     char buffer[32];
     // init buffer
     snprintf(buffer, sizeof(buffer), "PX ");
+#endif
 
     while(1) {
+
+#ifdef BINPROT
+        // prepare command
+        cmd.r = cr;
+        cmd.g = cg;
+        cmd.b = cb;
+
+#else
         char colorBuf[12];
         int colorLen = snprintf(colorBuf, sizeof(colorBuf), " %02x%02x%02x\n", cr, cg, cb);
 
@@ -94,6 +122,7 @@ int main() {
         if(sendData(s, offsetBuf, offsetLen)) {
             return 1;
         }
+#endif
 
         for(int y = 0; y < imgH; ++y) {
             char* line = data + y * size_of_line;
@@ -101,10 +130,18 @@ int main() {
             for(int x = 0; x < imgW; ++x) {
                 char* pxl = line + x * size_of_pixel;
                 if(pxl[n-1] != 0) {
+#ifdef BINPROT
+                    cmd.x = htole16(x + posx);
+                    cmd.y = htole16(y + posy);
+                    if(sendData(s, &cmd, sizeof(cmd))) {
+                        return 1;
+                    }
+#else
                     int length = snprintf(buffer+3, sizeof(buffer)-3, "%d %d%s", x, y, colorBuf);
                     if(sendData(s, buffer, length+3)) {
                         return 1;
                     }
+#endif
                 }
             }
         }
