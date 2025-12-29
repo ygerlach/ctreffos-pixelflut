@@ -6,6 +6,7 @@
 #include "string.h"
 #include "errno.h"
 #include <fcntl.h>
+#include <time.h>
 
 #include "stb/stb_image.h"
 
@@ -31,7 +32,10 @@ int h = 1080;
 
 int s = -1;
 const char* server_ip = "151.219.62.20";
+//const char* server_ip = "2001:67c:20a1:1561:e61d:2dff:fe4c:f7c2";
 //const char* server_ip = "151.219.13.247";
+const sa_family_t family = AF_INET;
+#define sockaddr_AF sockaddr_in
 
 uint16_t server_port = 1337;
 const char* image = "ctreffos-logo-square-whitetext_small.png";
@@ -72,12 +76,23 @@ struct BinCommand {
 };
 #endif
 
+long getTime() {
+    struct timespec ts1;
+    clock_gettime(CLOCK_MONOTONIC, &ts1);
+
+    return (ts1.tv_sec * 1000) + (ts1.tv_nsec / 1000000);
+}
+
 int main() {
     s = socket(AF_INET, SOCK_STREAM, 0);
-    struct sockaddr_in serv;
+    struct sockaddr_AF serv;
     serv.sin_family = AF_INET;
     serv.sin_port = htons(server_port);
-    inet_aton(server_ip, &serv.sin_addr);
+    if(inet_pton(family, server_ip, &serv.sin_addr) != 1) {
+        printf("failed to parse addres\n");
+        return 1;
+    }
+
     int con = connect(s, (struct sockaddr*) &serv, sizeof(serv));
     printf("%d %s\n", con, strerror(errno));
 
@@ -105,6 +120,9 @@ int main() {
     snprintf(buffer, sizeof(buffer), "PX ");
 #endif
 
+    unsigned long counter = 0;
+    long lastReset = getTime();
+
     while(1) {
 
 #ifdef BINPROT
@@ -130,6 +148,7 @@ int main() {
             for(int x = 0; x < imgW; ++x) {
                 char* pxl = line + x * size_of_pixel;
                 if(pxl[n-1] != 0) {
+                    counter ++;
 #ifdef BINPROT
                     cmd.x = htole16(x + posx);
                     cmd.y = htole16(y + posy);
@@ -177,6 +196,16 @@ int main() {
         cr += r * speed;
         cg += g * speed;
         cb += b * speed;
+
+        long now = getTime();
+        long diff = now - lastReset;
+        if(diff > 10000) {
+            const float pxlPerSec = counter / (diff / 1000.0);
+            printf("p/s %6.1f\n", pxlPerSec);
+
+            lastReset = now;
+            counter = 0;
+        }
     }
 
     printf("end\n");
