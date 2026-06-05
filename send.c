@@ -10,7 +10,7 @@
 
 #include "stb/stb_image.h"
 
-#define BINPROT 1
+#include "config.h"
 
 int speed = 3;
 int vx = 1;
@@ -31,14 +31,6 @@ int w = 1920;
 int h = 1080;
 
 int s = -1;
-const char* server_ip = "151.219.62.20";
-//const char* server_ip = "2001:67c:20a1:1561:e61d:2dff:fe4c:f7c2";
-//const char* server_ip = "151.219.13.247";
-const sa_family_t family = AF_INET;
-#define sockaddr_AF sockaddr_in
-
-uint16_t server_port = 1337;
-const char* image = "ctreffos-logo-square-whitetext_small.png";
 
 int sendData(int fd, char* buffer, int bufferSize) {
     do {
@@ -84,9 +76,9 @@ long getTime() {
 }
 
 int main() {
-    s = socket(AF_INET, SOCK_STREAM, 0);
+    s = socket(family, SOCK_STREAM, 0);
     struct sockaddr_AF serv;
-    serv.sin_family = AF_INET;
+    serv.sin_family = family;
     serv.sin_port = htons(server_port);
     if(inet_pton(family, server_ip, &serv.sin_addr) != 1) {
         printf("failed to parse addres\n");
@@ -135,12 +127,14 @@ int main() {
         char colorBuf[12];
         int colorLen = snprintf(colorBuf, sizeof(colorBuf), " %02x%02x%02x\n", cr, cg, cb);
 
+#ifdef OFFSET
         char offsetBuf[32];
         int offsetLen = snprintf(offsetBuf, sizeof(offsetBuf), "OFFSET %i %i\n", posx, posy);
         if(sendData(s, offsetBuf, offsetLen)) {
             return 1;
         }
-#endif
+#endif // OFFSET
+#endif // BINPROT
 
         for(int y = 0; y < imgH; ++y) {
             char* line = data + y * size_of_line;
@@ -149,18 +143,28 @@ int main() {
                 char* pxl = line + x * size_of_pixel;
                 if(pxl[n-1] != 0) {
                     counter ++;
+                    int xVal = x + posx;
+
+                    if(xVal > w) {
+                        xVal -= w;
+                    }
+
 #ifdef BINPROT
-                    cmd.x = htole16(x + posx);
+                    cmd.x = htole16(xVal);
                     cmd.y = htole16(y + posy);
                     if(sendData(s, &cmd, sizeof(cmd))) {
                         return 1;
                     }
-#else
+#else // BINPROT
+#ifdef OFFSET
                     int length = snprintf(buffer+3, sizeof(buffer)-3, "%d %d%s", x, y, colorBuf);
+#else
+                    int length = snprintf(buffer+3, sizeof(buffer)-3, "%d %d%s", xVal, y+posy, colorBuf);
+#endif // OFFSET
                     if(sendData(s, buffer, length+3)) {
                         return 1;
                     }
-#endif
+#endif // BINPROT
                 }
             }
         }
@@ -168,10 +172,16 @@ int main() {
         posx += vx;
         posy += vy;
 
-        if (posx + imgW >= w)
-            vx *= -1;
-        if (posx <= 0)
-            vx *= -1;
+        // if (posx + imgW >= w)
+        //     vx *= -1;
+        // if (posx <= 0)
+        //     vx *= -1;
+        if(posx >= w) {
+            posx = 0;
+        }
+        if (posx < 0) {
+            posx = imgW;
+        }
 
         if (posy + imgH >= h)
             vy *= -1;
@@ -206,6 +216,10 @@ int main() {
             lastReset = now;
             counter = 0;
         }
+
+#ifdef SPEEDLIMIT
+        usleep(SPEEDLIMIT * 1000);
+#endif
     }
 
     printf("end\n");
